@@ -8,7 +8,7 @@ A browser-based AI voice customer experience agent for Aura Skincare. The agent,
 
 The application provides a browser-based voice customer support experience where users can speak with Aria, check orders, receive policy-based responses, and view the post-call summary.
 
-**Live Demo:** Coming soon
+**Live Demo:** https://aura-ai-voice-agent-frontend.onrender.com
 
 ---
 
