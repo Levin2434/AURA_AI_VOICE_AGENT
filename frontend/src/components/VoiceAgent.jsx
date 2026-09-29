@@ -17,6 +17,10 @@ function VoiceAgent({
   onCallEnd
 }) {
 
+  /* =======================================================
+     CALL STATE
+  ======================================================= */
+
   const [
     isCallActive,
     setIsCallActive
@@ -28,6 +32,10 @@ function VoiceAgent({
     setStatus
   ] = useState("idle");
 
+
+  /* =======================================================
+     REFS
+  ======================================================= */
 
   const recognitionRef =
     useRef(null);
@@ -43,20 +51,42 @@ function VoiceAgent({
 
   /*
     Stores Gemini conversation history.
-
-    Example:
-
-    user -> where is my order
-    model -> please provide order ID
-    user -> 101
-    model -> order 101 information
   */
 
   const historyRef =
     useRef([]);
 
 
+  /*
+    Prevents multiple AI requests
+    at the same time.
+  */
+
   const processingRef =
+    useRef(false);
+
+
+  /*
+    Prevent duplicate speech-recognition
+    results.
+
+    Chrome can occasionally return the
+    same transcript more than once.
+  */
+
+  const lastTranscriptRef =
+    useRef("");
+
+
+  const lastTranscriptTimeRef =
+    useRef(0);
+
+
+  /*
+    Prevent duplicate call starts.
+  */
+
+  const callStartingRef =
     useRef(false);
 
 
@@ -70,12 +100,12 @@ function VoiceAgent({
       (resolve) => {
 
         if (
+          !text ||
           !window.speechSynthesis
         ) {
 
           resolve();
           return;
-
         }
 
 
@@ -84,7 +114,7 @@ function VoiceAgent({
 
         const utterance =
           new SpeechSynthesisUtterance(
-            text
+            String(text)
           );
 
 
@@ -175,6 +205,15 @@ function VoiceAgent({
       }
 
 
+      const cleanMessage =
+        String(message).trim();
+
+
+      if (!cleanMessage) {
+        return;
+      }
+
+
       processingRef.current =
         true;
 
@@ -188,7 +227,7 @@ function VoiceAgent({
 
         console.log(
           "Customer:",
-          message
+          cleanMessage
         );
 
 
@@ -200,7 +239,8 @@ function VoiceAgent({
 
           role: "user",
 
-          content: message
+          content:
+            cleanMessage
 
         });
 
@@ -224,12 +264,8 @@ function VoiceAgent({
               body:
                 JSON.stringify({
 
-                  message,
-
-                  /*
-                    Send previous conversation
-                    to backend.
-                  */
+                  message:
+                    cleanMessage,
 
                   history:
                     historyRef.current
@@ -242,6 +278,12 @@ function VoiceAgent({
 
         const data =
           await response.json();
+
+
+        console.log(
+          "Backend response:",
+          data
+        );
 
 
         if (
@@ -257,8 +299,37 @@ function VoiceAgent({
         }
 
 
+        /*
+          IMPORTANT:
+
+          Support both backend formats:
+
+          {
+            response: "..."
+          }
+
+          and
+
+          {
+            reply: "..."
+          }
+        */
+
         const reply =
+          data.response ||
           data.reply;
+
+
+        if (
+          !reply ||
+          typeof reply !== "string"
+        ) {
+
+          throw new Error(
+            "Backend returned an empty AI response."
+          );
+
+        }
 
 
         console.log(
@@ -268,10 +339,7 @@ function VoiceAgent({
 
 
         /* ---------------------------------------------
-           IMPORTANT:
-
-           Save customer message in history
-           BEFORE sending next message.
+           Save customer message in Gemini history
         --------------------------------------------- */
 
         historyRef.current.push({
@@ -280,7 +348,8 @@ function VoiceAgent({
 
           parts: [
             {
-              text: message
+              text:
+                cleanMessage
             }
           ]
 
@@ -297,7 +366,8 @@ function VoiceAgent({
 
           parts: [
             {
-              text: reply
+              text:
+                reply
             }
           ]
 
@@ -312,7 +382,8 @@ function VoiceAgent({
 
           role: "agent",
 
-          content: reply
+          content:
+            reply
 
         });
 
@@ -370,7 +441,7 @@ function VoiceAgent({
               startListening();
 
             },
-            300
+            500
           );
 
         }
@@ -431,6 +502,11 @@ function VoiceAgent({
 
       }
 
+
+      /*
+        Stop any old recognition instance
+        before creating a new one.
+      */
 
       if (
         recognitionRef.current
@@ -506,6 +582,43 @@ function VoiceAgent({
           }
 
 
+          /*
+            Prevent duplicate recognition results.
+
+            If Chrome gives us the exact same
+            transcript within 2 seconds, ignore it.
+          */
+
+          const now =
+            Date.now();
+
+
+          if (
+            transcript.toLowerCase() ===
+              lastTranscriptRef.current.toLowerCase() &&
+            now -
+              lastTranscriptTimeRef.current <
+              2000
+          ) {
+
+            console.log(
+              "Ignoring duplicate transcript:",
+              transcript
+            );
+
+            return;
+
+          }
+
+
+          lastTranscriptRef.current =
+            transcript;
+
+
+          lastTranscriptTimeRef.current =
+            now;
+
+
           console.log(
             "🎤 Heard:",
             transcript
@@ -563,7 +676,7 @@ function VoiceAgent({
                 startListening();
 
               },
-              500
+              700
             );
 
           }
@@ -579,22 +692,12 @@ function VoiceAgent({
           );
 
 
-          if (
-            isCallActiveRef.current &&
-            shouldListenRef.current &&
-            !processingRef.current
-          ) {
+          /*
+            Do NOT immediately restart here.
 
-            setTimeout(
-              () => {
-
-                startListening();
-
-              },
-              300
-            );
-
-          }
+            sendMessageToAI() will restart
+            listening after the AI response.
+          */
 
         };
 
@@ -626,6 +729,25 @@ function VoiceAgent({
   const startCall =
     async () => {
 
+      /*
+        Prevent accidental double-click /
+        duplicate call initialization.
+      */
+
+      if (
+        callStartingRef.current ||
+        isCallActiveRef.current
+      ) {
+
+        return;
+
+      }
+
+
+      callStartingRef.current =
+        true;
+
+
       console.log(
         "📞 Starting call..."
       );
@@ -644,17 +766,33 @@ function VoiceAgent({
         true;
 
 
+      processingRef.current =
+        false;
+
+
       /*
-        New call = clear old conversation.
+        Clear previous conversation.
       */
 
       historyRef.current =
         [];
 
 
+      lastTranscriptRef.current =
+        "";
+
+
+      lastTranscriptTimeRef.current =
+        0;
+
+
       const greeting =
         "Hi! I'm Aria from Aura Skincare. How can I help you today?";
 
+
+      /*
+        Add greeting only once.
+      */
 
       onTranscriptUpdate({
 
@@ -669,6 +807,10 @@ function VoiceAgent({
       await speakResponse(
         greeting
       );
+
+
+      callStartingRef.current =
+        false;
 
 
       if (
@@ -693,6 +835,10 @@ function VoiceAgent({
       console.log(
         "📞 Ending call..."
       );
+
+
+      callStartingRef.current =
+        false;
 
 
       shouldListenRef.current =
@@ -762,6 +908,10 @@ function VoiceAgent({
 
 
         isCallActiveRef.current =
+          false;
+
+
+        callStartingRef.current =
           false;
 
 
