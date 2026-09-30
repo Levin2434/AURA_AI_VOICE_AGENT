@@ -9,7 +9,7 @@ import CallControls from "./CallControls";
 
 
 const API_URL =
-  "http://localhost:5000/api/chat";
+  "https://aura-ai-voice-agent.onrender.com/api/chat";
 
 
 function VoiceAgent({
