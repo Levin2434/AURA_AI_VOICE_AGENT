@@ -177,12 +177,39 @@ npm run dev
 
 ---
 
-## Engineering Notes
+## Engineering Approach
 
-- **State:** the frontend keeps the transcript and agent state, and sends conversation history to the backend for context.
-- **Production order lookup:** `get_order_details` would call a secure, authenticated order-management service and return only the fields needed.
-- **Reducing hallucinations:** explicit system prompt and policies, real order lookup, order ID validation, guardrails, deterministic fallback.
-- **Scaling ideas:** real order APIs, customer authentication, speech-to-speech and streaming, human handoff, multilingual support, logging and monitoring, rate limiting, HTTPS and cloud deployment.
+### 1. What is the overall architecture and why did you choose this tech stack?
+
+The application uses a React + Vite frontend and a Node.js + Express backend.
+
+The browser handles microphone input, speech recognition, the live transcript, call controls, and speech synthesis. The frontend sends customer messages and conversation history to the backend through REST APIs.
+
+The backend handles the AI response flow, order lookup through `get_order_details(order_id)`, policy/guardrail logic, invalid order handling, and post-call summary generation.
+
+Google Gemini is used for AI-generated responses when available, while a deterministic local fallback keeps important order and policy flows functional when the AI service is unavailable.
+
+### 2. What was the hardest part and how did you solve it?
+
+The most challenging part was making the application reliable when external AI services are unavailable or when an order cannot be found.
+
+I solved this by separating order lookup from the AI response, validating and normalizing order IDs, adding explicit policy rules, handling invalid and missing order IDs, and implementing deterministic fallback responses.
+
+The deployment stage also required separate production API URLs for the chat and summary endpoints so the public frontend did not attempt to call `localhost`.
+
+### 3. If you had one more week, what would you improve?
+
+I would improve the voice experience by moving from browser speech recognition and speech synthesis to a lower-latency streaming speech-to-speech architecture.
+
+I would also add authenticated customer/order access, a real order-management API, human-agent handoff, multilingual support, better conversation persistence, automated tests, and production monitoring.
+
+### 4. How would you scale this to 1,000+ calls per day?
+
+I would deploy the frontend and backend as independently scalable services behind HTTPS and a load balancer.
+
+The backend would use stateless API instances so multiple instances could handle concurrent calls. Order data would come from a secure production order-management service, while logging and monitoring would be added for reliability and debugging.
+
+For higher traffic, I would add rate limiting, caching where appropriate, asynchronous processing for non-real-time tasks, centralized observability, and appropriate AI provider capacity/quotas.
 
 ---
 
