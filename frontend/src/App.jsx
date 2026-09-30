@@ -11,7 +11,7 @@ import CallSummary from "./components/CallSummary";
 
 
 const SUMMARY_API_URL =
-  "http://localhost:5000/api/summary";
+  "https://aura-ai-voice-agent.onrender.com/api/summary";
 
 
 function App() {
